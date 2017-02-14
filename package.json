@@ -1,0 +1,25 @@
+{
+  "name": "ec2-user",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "aws-sdk": "^2.12.0",
+    "express": "^4.14.1",
+    "request": "^2.79.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eulee0/Bootleg-Bronco-Bus-Map.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/eulee0/Bootleg-Bronco-Bus-Map/issues"
+  },
+  "homepage": "https://github.com/eulee0/Bootleg-Bronco-Bus-Map#readme"
+}

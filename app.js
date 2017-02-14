@@ -1,82 +1,92 @@
-var express = require ('express')
+var request = require ('request');
+var parseString = require ('xml2js').parseString;
 var AWS = require ('aws-sdk');
-var chokidar = require ('chokidar')
-var fs = require ('fs')
-AWS.config.loadFromPath('./config.json');
-var s3 = new AWS.S3();
 
-var myBucket = 'cs499hack1';
+var express = require ('express')
 var app = express()
 
-app.use(function(req, res, next) {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-  next();
+AWS.config.update({
+  region: "us-west-2"
 });
 
-app.get('/', function (req, res) {
-  res.send ('Welcome to Bootleg Dropbox v0.0.0.1')
-})
+var docClient = new AWS.DynamoDB.DocumentClient();
+var table = "BroncoBusAPI";
 
-app.get('/list', function(req, res){
-	var params = {
-	  Bucket: myBucket
-	};
-	s3.listObjects (params, 	function(err, data){
-	  for(var i = 0; i < data.Contents.length; i++) {
-	  	data.Contents[i].Url = 'https://s3-us-west-2.amazonaws.com/' + data.Name + '/' + data.Contents[i].Key;
-	  }
-	  res.send(data.Contents);
-	});
-});
-
-var watcher = chokidar.watch('/home/ec2-user/bootlegDropbox', {
-  ignored: /(^|[\/\\])\../,
-  persistent: true
-});
-
-var log = console.log.bind(console);
-// Add event listeners.
-watcher
-  .on('add', function (path){
-    console.log (path + ' has been uploaded');
-    uploadtoS3(path);
-  })
-  .on('change', function (path){
-    console.log (path + ' has been altered');
-    uploadtoS3(path);
-  })
-  .on('unlink', function(path){
-    console.log (path + " has been removed");
-    removefromS3(path);
-  });
-
-function uploadtoS3(filePath) {
-  fs.readFile(filePath, function(err, data) {
-    params = {Bucket: myBucket, Key: filePath, Body: data, ACL: "public-read"};
-    s3.putObject(params, function(err, data) {
-      if (err) {
-        console.log (err)
-      } else {
-        console.log("Uploaded to " + myBucket, data);
+function fetchBusTimes() {
+  request ('https://rqato4w151.execute-api.us-west-1.amazonaws.com/dev/info', function (error, response, body) {
+    if (!error && response.statusCode == 200) {
+      console.log(body);
+      parseString(body, function (err, result) {
+        //console.dir (result.rss.channel[0].item);
+        var items = result.rss.channel[0].item;
+        for (var i = 0; i < items.length; i++) {
+          console.log (items[i].title[0], items[i].description[0]);
+          putItem(items[i].title[0], items[i].description[0]);
         }
       });
-    });
-  }
+    } else {
+      console.log("Unable to read given API");
+    }
+  })
+}
 
-function removefromS3(filePath) {
-  fs.readFile (filePath, function (err, data) {
-    params = {Bucket: myBucket, Key: filePath };
-    s3.deleteObject(params, function(err, data) {
-      if (err) {
-        console.log (err)
-      } else {
-        console.log ("Deleted from " + myBucket, data);
-      }
-    });
+function putItem (id, logo, lat, lng, route) {
+  var params = {
+    TableName:table,
+    Item:{
+      "BusID": id,
+      "logo": logo,
+      "lat": lat,
+      "lng": lng,
+      "route": route,
+      "Timestamp": Date.now()
+    }
+  };
+
+  console.log ("Adding new bus...");
+  docClient.put(params, function(err, data) {
+    if (err) {
+      console.error ("Unable to add bus. Error JSON:", JSON.stringify(err, null, 2));
+    } else {
+      console.log ("Added bus:", JSON.stringify(data, null, 2));
+    }
   });
 }
 
-app.listen (3000, function () {
-  console.log('Your app is listening on port 3000!')
+function queryBusTime(bus, res) {
+  var params = {
+      TableName : table,
+      KeyConditionExpression: "#key = :inputName",
+      ExpressionAttributeNames:{
+          "#key": "bus"
+      },
+      ExpressionAttributeValues: {
+          ":inputName":bus
+      }
+  };
+
+  docClient.query(params, function(err, data) {
+      if (err) {
+          console.error("Unable to query. Error:", JSON.stringify(err, null, 2));
+      } else {
+          console.log("Query succeeded.");
+          data.Items.forEach(function(item) {
+              console.log(item);
+          });
+          res.send(data.Items);
+      }
+  });
+}
+
+app.get('/fetch', function (req, res) {
+  fetchBusTimes();
+    res.send('OK');
+})
+
+app.get('/query', function (req, res) {
+  queryBusTime(req.query.name, res);
+})
+
+app.listen(3000, function () {
+  console.log('Example app listening on port 3000!')
 })
